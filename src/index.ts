@@ -10,6 +10,7 @@ export default class Builder {
   limitNumber: number;
   orderbyColumns: string[];
   offsetNumber: number;
+  isOrderByDESC: boolean = true;
 
   public select(columns: Columns[]) {
     this.columns.push(...columns);
@@ -35,8 +36,10 @@ export default class Builder {
     return this;
   }
 
-  public orderBy(columns: string[], isASC: boolean = true) {
+  public orderBy(columns: string[], isDESC: boolean = false) {
+    this.isOrderByDESC = isDESC;
     this.orderbyColumns = columns;
+    return this;
   }
 
   public offset(number: number) {
@@ -55,7 +58,6 @@ export default class Builder {
     if (isHasJoinOperator) {
       this.rawSql += this.joinTables
         .map(({ type, name, onCondition }) => {
-          const { column, operator, value } = onCondition;
           let joinOperator = "";
           if (type === "left") {
             joinOperator += "LEFT JOIN";
@@ -68,7 +70,19 @@ export default class Builder {
           if (type === "inner") {
             joinOperator += "INNER JOIN";
           }
-          return `${joinOperator} ${name} ON ${column} ${operator} ${value} \n`;
+          const listAndCondition = onCondition
+            .filter(({ isOr }) => isOr === false)
+            .map(({ column, operator, value }) => {
+              return `${column} ${operator} ${value} `;
+            })
+            .join("AND ");
+          const listOrCondition = onCondition
+            .filter(({ isOr }) => isOr === true)
+            .map(({ column, operator, value }) => {
+              return `${column} ${operator} ${value} `;
+            })
+            .join("OR ");
+          return `${joinOperator} ${name} ON ( ${listAndCondition} ${listOrCondition}) \n`;
         })
         .reduce((previous, current) => previous + current, "");
     }
@@ -79,6 +93,13 @@ export default class Builder {
     const isHasLimitOperator = this.limitNumber !== undefined;
     if (isHasLimitOperator) {
       this.rawSql += `\nLIMIT ${this.limitNumber} `;
+    }
+  }
+
+  public compileOrderBy() {
+    this.rawSql += `\nORDER BY ${this.orderbyColumns.join(", ")}`;
+    if (this.isOrderByDESC) {
+      this.rawSql += " DESC";
     }
   }
 
@@ -105,23 +126,23 @@ export default class Builder {
     const listAndCondition = this.whereCondition
       .filter(({ isOr }) => isOr === false)
       .map(({ column, operator, value }) => {
-        return `${column} ${operator} ${value} `;
+        return `(${column} ${operator} ${value}) `;
       })
       .join("AND ");
     const listOrCondition = this.whereCondition
       .filter(({ isOr }) => isOr === true)
       .map(({ column, operator, value }) => {
-        return `${column} ${operator} ${value} `;
+        return `(${column} ${operator} ${value}) `;
       })
       .join("OR ");
     this.rawSql += "WHERE ";
-    this.rawSql += listAndCondition;
-    this.rawSql += "OR ";
-    this.rawSql += listOrCondition;
-  }
+    this.rawSql += `${listAndCondition}`;
 
-  public compileOrderBy() {
-    this.rawSql += this.orderbyColumns.join(", ");
+    const isHasOrCondtions = listOrCondition.length !== 0;
+    if (isHasOrCondtions) {
+      this.rawSql += " OR ";
+      this.rawSql += `${listOrCondition}`;
+    }
   }
 
   public compile() {
@@ -132,26 +153,7 @@ export default class Builder {
     this.compileLimit();
     this.compileOffset();
     this.compileOrderBy();
+    this.rawSql += ";";
     return this.rawSql;
   }
 }
-
-const a = new Builder();
-console.log(
-  a
-    .select([{ name: "a", alias: "users_a" }])
-    .from("users")
-    .where({ column: "staffs.id", operator: "=", value: "1", isOr: false })
-    .where({ column: "user.id", operator: "!=", value: "2", isOr: false })
-    .where({ column: "user.id", operator: "!=", value: "2", isOr: true })
-    .where({ column: "user.id", operator: "!=", value: "2", isOr: true })
-    .join({
-      name: "staffs",
-      type: "inner",
-      columns: [{ name: "id", alias: "staff_id" }],
-      onCondition: { column: "staffs.id", operator: "<", value: "1" }
-    })
-    .limit(10)
-    .offset(10)
-    .compile()
-);

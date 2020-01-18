@@ -2,12 +2,13 @@ export interface JoinCondition {
   column: string;
   operator: string;
   value: string;
+  isOr: boolean;
 }
 
 export interface JoinTable {
   name: string;
   type: string;
-  onCondition: JoinCondition;
+  onCondition: JoinCondition[];
   columns: Columns[];
 }
 
