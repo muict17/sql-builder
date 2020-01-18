@@ -1,0 +1,11 @@
+{
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "lib": ["es6", "dom", "es2017"],
+    "target": "es5",
+    "module": "commonjs",
+    "allowJs": true,
+    "outDir": "./dist",
+    "baseUrl": "./src"
+  }
+}
